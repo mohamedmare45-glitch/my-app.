@@ -1,0 +1,765 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدير المصاريف الشخصية</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- SheetJS (xlsx) for Excel export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- jsPDF and jsPDF-AutoTable for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Cairo', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4f46e5; border-radius: 4px; }
+        .dark ::-webkit-scrollbar-thumb { background: #6366f1; }
+
+        @media print {
+            body * { visibility: hidden; }
+            .print-area, .print-area * { visibility: visible; }
+            .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 2rem; }
+            .no-print { display: none !important; }
+        }
+
+        .chart-container { position: relative; height: 40vh; width: 100%; }
+        .page-content { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
+        .page-content.hidden { opacity: 0; transform: translateY(10px); pointer-events: none; position: absolute; visibility: hidden; }
+        .importance-high { background-color: #ef4444; color: white; }
+        .importance-medium { background-color: #f97316; color: white; }
+        .importance-low { background-color: #22c55e; color: white; }
+        
+        .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; opacity: 0; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .dark .glass-card {
+            background: rgba(30, 41, 59, 0.7); /* slate-800 */
+             border: 1px solid rgba(51, 65, 85, 1); /* slate-700 */
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { DEFAULT: '#4f46e5', 'hover': '#4338ca', 'light': '#e0e7ff' },
+                        'light-bg': '#f0f2f5', 'dark-bg': '#0f172a', 'dark-card': '#1e293b'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-light-bg dark:bg-dark-bg text-gray-800 dark:text-gray-200 transition-colors duration-300 antialiased">
+
+    <!-- Login Page -->
+    <div id="loginPage" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-indigo-50 to-blue-100 dark:from-slate-900 dark:to-indigo-900">
+        <div class="w-full max-w-md bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl shadow-2xl rounded-2xl p-8 text-center animate-fade-in-up">
+            <div id="login-container"></div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="appPage" class="hidden">
+        <div class="flex h-screen bg-light-bg dark:bg-dark-bg">
+            <!-- Sidebar -->
+            <aside class="w-20 md:w-64 bg-white/80 dark:bg-dark-card/80 backdrop-blur-xl shadow-lg flex-shrink-0 flex flex-col no-print border-l border-gray-200 dark:border-slate-700 transition-all duration-300">
+                <div class="h-20 flex items-center justify-center border-b dark:border-slate-700">
+                    <div class="p-2 rounded-full bg-gradient-to-br from-primary to-indigo-400 text-white shadow-md"><i data-lucide="piggy-bank" class="h-7 w-7"></i></div>
+                    <span class="ml-3 text-2xl font-bold text-primary dark:text-indigo-300 hidden md:inline">مصروفي</span>
+                </div>
+                <nav class="flex-grow px-2 md:px-4 py-4">
+                    <a href="#" data-page="dashboard" class="nav-link flex items-center justify-center md:justify-start p-3 my-1 rounded-lg font-semibold"><i data-lucide="layout-dashboard" class="h-6 w-6"></i><span class="mx-4 hidden md:inline">لوحة التحكم</span></a>
+                    <a href="#" data-page="transactions" class="nav-link flex items-center justify-center md:justify-start p-3 my-1 rounded-lg font-semibold"><i data-lucide="arrow-right-left" class="h-6 w-6"></i><span class="mx-4 hidden md:inline">العمليات</span></a>
+                    <a href="#" data-page="goals" class="nav-link flex items-center justify-center md:justify-start p-3 my-1 rounded-lg font-semibold"><i data-lucide="target" class="h-6 w-6"></i><span class="mx-4 hidden md:inline">الأهداف</span></a>
+                    <a href="#" data-page="reports" class="nav-link flex items-center justify-center md:justify-start p-3 my-1 rounded-lg font-semibold"><i data-lucide="pie-chart" class="h-6 w-6"></i><span class="mx-4 hidden md:inline">التقارير</span></a>
+                    <a href="#" data-page="trash" class="nav-link flex items-center justify-center md:justify-start p-3 my-1 rounded-lg font-semibold"><i data-lucide="trash-2" class="h-6 w-6"></i><span class="mx-4 hidden md:inline">سلة المهملات</span></a>
+                    <a href="#" data-page="settings" class="nav-link flex items-center justify-center md:justify-start p-3 my-1 rounded-lg font-semibold"><i data-lucide="settings" class="h-6 w-6"></i><span class="mx-4 hidden md:inline">الإعدادات</span></a>
+                </nav>
+                <div class="p-4 border-t dark:border-slate-700">
+                    <button id="theme-toggle-btn" class="w-full flex items-center justify-center p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700"><i id="theme-icon" data-lucide="sun" class="h-6 w-6"></i><span class="ml-2 hidden md:inline">الوضع</span></button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="flex-1 flex flex-col overflow-hidden">
+                <header class="h-20 bg-white/80 dark:bg-dark-card/80 backdrop-blur-xl flex items-center justify-between px-4 md:px-8 border-b dark:border-slate-700 no-print">
+                    <h1 id="page-title" class="text-2xl font-bold text-primary dark:text-indigo-300"></h1>
+                    <div class="flex items-center gap-2">
+                        <span class="hidden md:inline">مرحباً، <span id="app-username" class="font-semibold"></span></span>
+                        <button id="logout-btn" class="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-800/50 text-red-500" title="تسجيل الخروج"><i data-lucide="log-out" class="h-5 w-5"></i></button>
+                    </div>
+                </header>
+
+                <div class="flex-1 overflow-x-hidden overflow-y-auto bg-light-bg dark:bg-dark-bg p-4 md:p-6 lg:p-8">
+                    <div class="relative">
+                        <!-- Pages will be rendered here -->
+                        <div id="dashboard" class="page-content"></div>
+                        <div id="transactions" class="page-content hidden"></div>
+                        <div id="goals" class="page-content hidden"></div>
+                        <div id="reports" class="page-content hidden"></div>
+                        <div id="trash" class="page-content hidden"></div>
+                        <div id="settings" class="page-content hidden"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Modal -->
+    <div id="modal-container" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 hidden"><div id="modal-content" class="bg-white/80 dark:bg-dark-card/80 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-lg p-8 transform transition-all scale-95 opacity-0"></div></div>
+    <!-- Print Area (hidden) -->
+    <div id="print-area" class="hidden print-area"></div>
+
+<script>
+// This script is self-contained and manages the entire application logic.
+document.addEventListener('DOMContentLoaded', () => {
+
+    // --- STATE MANAGEMENT ---
+    let state = {};
+    const defaultState = {
+        user: null,
+        pin: null,
+        transactions: [],
+        goals: [],
+        trash: [],
+        settings: {
+            theme: 'light',
+            currency: 'ILS',
+            categories: {
+                income: ['راتب', 'هدية', 'أعمال حرة'],
+                expense: ['طعام', 'مواصلات', 'فواتير', 'ترفيه', 'صحة', 'تعليم', 'تسوق']
+            }
+        },
+    };
+
+    // --- HELPERS ---
+    const saveData = () => localStorage.setItem('expenseTrackerData', JSON.stringify(state));
+    const loadData = () => {
+        const data = localStorage.getItem('expenseTrackerData');
+        state = data ? JSON.parse(data) : JSON.parse(JSON.stringify(defaultState));
+        // Migration for users from older versions
+        if (!state.settings.categories) state.settings.categories = defaultState.settings.categories;
+        if (!state.pin) state.pin = null;
+    };
+    const getCurrencyFormatter = () => {
+        const locale = state.settings.currency === 'ILS' ? 'he-IL' : 'ar-SA';
+        return new Intl.NumberFormat(locale, { style: 'currency', currency: state.settings.currency });
+    };
+
+    // --- DOM ELEMENTS ---
+    const loginPage = document.getElementById('loginPage'), appPage = document.getElementById('appPage');
+    const loginContainer = document.getElementById('login-container');
+    const appUsername = document.getElementById('app-username');
+    const pageTitle = document.getElementById('page-title');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const pageContents = document.querySelectorAll('.page-content');
+    const themeIcon = document.getElementById('theme-icon');
+    const modalContainer = document.getElementById('modal-container'), modalContent = document.getElementById('modal-content');
+    const printArea = document.getElementById('print-area');
+    let monthlyChart, reportChart;
+
+    // --- RENDER FUNCTIONS (LOGIN) ---
+    const renderLogin = () => {
+        let html = '';
+        if (!state.user) { // First time ever
+            html = `<div id="first-time">
+                <div class="mx-auto h-20 w-20 flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-indigo-400 text-white shadow-lg"><i data-lucide="rocket" class="h-10 w-10"></i></div>
+                <h1 class="text-3xl font-bold mt-6 text-primary dark:text-indigo-300">أهلاً بك في مدير المصاريف</h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-2">ابدأ رحلتك نحو إدارة مالية أفضل. ما هو اسمك؟</p>
+                <form id="login-form" class="mt-8">
+                    <input type="text" id="username-input" placeholder="اكتب اسمك هنا" class="w-full p-3 border-2 border-transparent focus:border-primary rounded-lg bg-gray-200/50 dark:bg-slate-700" required>
+                    <button type="submit" class="w-full bg-gradient-to-r from-primary to-indigo-500 hover:shadow-lg text-white font-bold py-3 px-4 rounded-lg mt-4 transition-all transform hover:scale-105">التالي</button>
+                </form>
+            </div>`;
+        } else if (!state.pin) { // Has username, needs PIN
+            html = `<div id="set-pin">
+                <h1 class="text-3xl font-bold mt-6 text-primary dark:text-indigo-300">تعيين رمز الأمان</h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-2">لحماية بياناتك، قم بتعيين رمز PIN مكون من 4 أرقام.</p>
+                <form id="pin-set-form" class="mt-8">
+                    <input type="password" id="pin-set-input" inputmode="numeric" maxlength="4" pattern="\\d{4}" placeholder="----" class="w-full text-center tracking-[1em] p-3 border-2 border-transparent focus:border-primary rounded-lg bg-gray-200/50 dark:bg-slate-700" required>
+                    <button type="submit" class="w-full bg-gradient-to-r from-primary to-indigo-500 hover:shadow-lg text-white font-bold py-3 px-4 rounded-lg mt-4 transition-all transform hover:scale-105">حفظ والدخول</button>
+                </form>
+            </div>`;
+        } else { // Welcome back, needs PIN
+            html = `<div id="welcome-back">
+                <div class="mx-auto h-20 w-20 flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-indigo-400 text-white shadow-lg"><i data-lucide="wallet" class="h-10 w-10"></i></div>
+                <h1 class="text-3xl font-bold mt-6 text-primary dark:text-indigo-300">مرحباً بعودتك، <span id="username-display">${state.user}</span>!</h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-2">أدخل رمز PIN للمتابعة.</p>
+                <form id="pin-enter-form" class="mt-8">
+                     <input type="password" id="pin-enter-input" inputmode="numeric" maxlength="4" placeholder="----" class="w-full text-center tracking-[1em] p-3 border-2 border-transparent focus:border-primary rounded-lg bg-gray-200/50 dark:bg-slate-700" required>
+                     <p id="pin-error" class="text-red-500 text-sm mt-2 h-5"></p>
+                    <button type="submit" class="w-full bg-gradient-to-r from-primary to-indigo-500 hover:shadow-lg text-white font-bold py-3 px-4 rounded-lg mt-2 transition-all transform hover:scale-105">الدخول</button>
+                </form>
+            </div>`;
+        }
+        loginContainer.innerHTML = html;
+        lucide.createIcons();
+    };
+
+    // --- UI & THEME ---
+    const applyTheme = () => {
+        if (state.settings.theme === 'dark') {
+            document.documentElement.classList.add('dark');
+            themeIcon.setAttribute('data-lucide', 'moon');
+        } else {
+            document.documentElement.classList.remove('dark');
+            themeIcon.setAttribute('data-lucide', 'sun');
+        }
+        lucide.createIcons();
+    };
+
+    // This object holds all functions that render a page's content
+    const pageRenderers = {
+        dashboard: renderDashboardPage,
+        transactions: renderTransactionsPage,
+        goals: renderGoalsPage,
+        reports: renderReportsPage,
+        trash: renderTrashPage,
+        settings: renderSettingsPage
+    };
+    
+    const showPage = (pageId) => {
+        pageContents.forEach(page => page.classList.toggle('hidden', page.id !== pageId));
+        navLinks.forEach(link => {
+            const isActive = link.dataset.page === pageId;
+            link.classList.toggle('bg-primary-light', isActive);
+            link.classList.toggle('dark:bg-primary/20', isActive);
+            link.classList.toggle('text-primary', isActive);
+            link.classList.toggle('dark:text-indigo-300', isActive);
+        });
+
+        const pageNameMap = { 'dashboard': 'لوحة التحكم', 'transactions': 'العمليات', 'goals': 'الأهداف', 'reports': 'التقارير', 'trash': 'سلة المهملات', 'settings': 'الإعدادات' };
+        pageTitle.textContent = pageNameMap[pageId] || '';
+        
+        if (pageRenderers[pageId]) {
+            document.getElementById(pageId).innerHTML = pageRenderers[pageId]();
+            lucide.createIcons();
+        } else {
+            console.error(No render function found for page: ${pageId});
+        }
+    };
+    
+    // --- MODAL ---
+    function openModal(htmlContent) {
+        modalContent.innerHTML = htmlContent;
+        modalContainer.classList.remove('hidden');
+        setTimeout(() => modalContent.classList.remove('scale-95', 'opacity-0'), 10);
+        lucide.createIcons();
+        modalContent.querySelector('.close-modal-btn')?.addEventListener('click', closeModal);
+        modalContainer.addEventListener('click', (e) => { if (e.target === modalContainer) closeModal(); });
+    }
+    function closeModal() {
+        modalContent.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => { modalContainer.classList.add('hidden'); modalContent.innerHTML = ''; }, 200);
+    }
+
+    // --- RENDER PAGE CONTENT ---
+    function renderDashboardPage() {
+        const CURRENCY = getCurrencyFormatter();
+        const totalIncome = state.transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+        const totalExpenses = state.transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+        let avgDailySpend = 0;
+        if (state.transactions.length > 0) {
+            const firstDate = new Date(Math.min(...state.transactions.map(t => new Date(t.date).getTime())));
+            const days = Math.max(1, Math.ceil((new Date() - firstDate) / 86400000));
+            avgDailySpend = totalExpenses / days;
+        }
+
+        const expenseByCategory = state.transactions.filter(t => t.type === 'expense').reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + t.amount; return acc; }, {});
+        const sortedCategories = Object.entries(expenseByCategory).sort(([,a], [,b]) => b - a).slice(0, 5);
+        const topCategoriesHTML = sortedCategories.length > 0 ? sortedCategories.map(([category, amount]) => <div class="animate-fade-in-up"><div class="flex justify-between mb-1"><span class="text-sm font-medium">${category}</span><span class="text-sm">${CURRENCY.format(amount)}</span></div><div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-slate-700"><div class="bg-gradient-to-r from-primary to-indigo-400 h-2.5 rounded-full" style="width: ${totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0}%"></div></div></div>).join('') : '<p class="text-gray-500">لا توجد بيانات إنفاق كافية.</p>';
+
+        const html = `
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="glass-card p-6 rounded-2xl shadow-md animate-fade-in-up flex items-center"><div class="p-4 bg-green-100 dark:bg-green-800/50 rounded-full"><i data-lucide="arrow-down-left" class="h-8 w-8 text-green-500"></i></div><div class="mr-4"><p class="text-gray-500 dark:text-gray-400">إجمالي الدخل</p><p class="text-2xl font-bold text-green-600 dark:text-green-400">${CURRENCY.format(totalIncome)}</p></div></div>
+                <div class="glass-card p-6 rounded-2xl shadow-md animate-fade-in-up flex items-center" style="animation-delay: 0.1s;"><div class="p-4 bg-red-100 dark:bg-red-800/50 rounded-full"><i data-lucide="arrow-up-right" class="h-8 w-8 text-red-500"></i></div><div class="mr-4"><p class="text-gray-500 dark:text-gray-400">إجمالي المصاريف</p><p class="text-2xl font-bold text-red-600 dark:text-red-400">${CURRENCY.format(totalExpenses)}</p></div></div>
+                <div class="glass-card p-6 rounded-2xl shadow-md animate-fade-in-up flex items-center" style="animation-delay: 0.2s;"><div class="p-4 bg-blue-100 dark:bg-blue-800/50 rounded-full"><i data-lucide="scale" class="h-8 w-8 text-blue-500"></i></div><div class="mr-4"><p class="text-gray-500 dark:text-gray-400">الرصيد الحالي</p><p class="text-2xl font-bold text-blue-600 dark:text-blue-400">${CURRENCY.format(totalIncome - totalExpenses)}</p></div></div>
+                <div class="glass-card p-6 rounded-2xl shadow-md animate-fade-in-up flex items-center" style="animation-delay: 0.3s;"><div class="p-4 bg-yellow-100 dark:bg-yellow-800/50 rounded-full"><i data-lucide="calendar-days" class="h-8 w-8 text-yellow-500"></i></div><div class="mr-4"><p class="text-gray-500 dark:text-gray-400">متوسط الصرف اليومي</p><p class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">${CURRENCY.format(avgDailySpend)}</p></div></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+                <div class="lg:col-span-2 glass-card p-6 rounded-2xl shadow-md"><h3 class="text-lg font-bold text-primary dark:text-indigo-300 mb-4">ملخص شهري (آخر 6 أشهر)</h3><div class="chart-container"><canvas id="monthly-chart"></canvas></div></div>
+                <div class="glass-card p-6 rounded-2xl shadow-md"><h3 class="text-lg font-bold text-primary dark:text-indigo-300 mb-4">أعلى فئات الإنفاق</h3><div class="space-y-4">${topCategoriesHTML}</div></div>
+            </div>`;
+        
+        setTimeout(() => renderMonthlyChart(), 0);
+        return html;
+    }
+    
+    function renderTransactionsPage(filteredTxs) {
+        const txsToRender = filteredTxs || state.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+        const CURRENCY = getCurrencyFormatter();
+        const tableBodyHTML = txsToRender.length === 0 
+            ? <tr><td colspan="7" class="text-center p-8 text-gray-500">لا توجد عمليات مسجلة.</td></tr>
+            : txsToRender.map(t => `
+                <tr class="border-b dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                    <td class="px-6 py-4 font-medium">${t.description}</td>
+                    <td class="px-6 py-4 ${t.type === 'income' ? 'text-green-500' : 'text-red-500'} font-semibold">${CURRENCY.format(t.amount)}</td>
+                    <td class="px-6 py-4">${t.category}</td>
+                    <td class="px-6 py-4">${t.type === 'income' ? 'دخل' : 'مصروف'}</td>
+                    <td class="px-6 py-4"><span class="px-2 py-1 text-xs font-medium rounded-full importance-${t.importance}">${{high: 'عالي', medium: 'متوسط', low: 'منخفض'}[t.importance]}</span></td>
+                    <td class="px-6 py-4">${new Date(t.date).toLocaleDateString('ar-SA')}</td>
+                    <td class="px-6 py-4 flex items-center gap-2">
+                        <button class="edit-transaction-btn p-2 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full" data-id="${t.id}" title="تعديل"><i data-lucide="edit" class="h-4 w-4 pointer-events-none"></i></button>
+                        <button class="delete-transaction-btn p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full" data-id="${t.id}" title="حذف"><i data-lucide="trash-2" class="h-4 w-4 pointer-events-none"></i></button>
+                    </td>
+                </tr>`).join('');
+        
+        return `
+            <div class="glass-card p-6 rounded-2xl shadow-md">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+                    <div class="mb-4 md:mb-0">
+                        <h3 class="text-xl font-bold text-primary dark:text-indigo-300">سجل العمليات</h3>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                         <button id="add-transaction-btn" class="p-2 px-4 bg-gradient-to-r from-primary to-indigo-500 hover:shadow-lg text-white rounded-lg flex items-center justify-center"><i data-lucide="plus" class="h-5 w-5 ml-2"></i> إضافة عملية</button>
+                         <button id="export-excel-btn" class="p-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center"><i data-lucide="file-spreadsheet" class="h-5 w-5 ml-2"></i> Excel</button>
+                         <button id="export-pdf-btn" class="p-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center justify-center"><i data-lucide="file-text" class="h-5 w-5 ml-2"></i> PDF</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <input type="text" id="transactions-search" placeholder="ابحث بالوصف..." class="p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600 md:col-span-1">
+                    <select id="transactions-type-filter" class="p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600"><option value="all">كل الأنواع</option><option value="income">دخل</option><option value="expense">مصروف</option></select>
+                    <select id="transactions-importance-filter" class="p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600"><option value="all">كل الأهميات</option><option value="high">عالي</option><option value="medium">متوسط</option><option value="low">منخفض</option></select>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-right">
+                        <thead class="text-xs uppercase bg-gray-50 dark:bg-slate-700/50"><tr><th class="px-6 py-3">الوصف</th><th class="px-6 py-3">المبلغ</th><th class="px-6 py-3">الفئة</th><th class="px-6 py-3">النوع</th><th class="px-6 py-3">الأهمية</th><th class="px-6 py-3">التاريخ</th><th class="px-6 py-3">إجراءات</th></tr></thead>
+                        <tbody id="transactions-table-body">${tableBodyHTML}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+    
+    function renderGoalsPage() {
+        const CURRENCY = getCurrencyFormatter();
+        const goalsHTML = state.goals.length === 0 
+            ? <div class="md:col-span-2 lg:col-span-3 text-center p-8 text-gray-500">لم تقم بإضافة أي أهداف بعد.</div>
+            : state.goals.map(g => {
+                const p = g.targetAmount > 0 ? (g.savedAmount / g.targetAmount) * 100 : 0;
+                return `
+                <div class="bg-gray-50 dark:bg-slate-700/50 p-6 rounded-xl shadow-sm">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h4 class="text-lg font-bold text-primary dark:text-indigo-300">${g.name}</h4>
+                            <p class="text-sm mt-1">تم ادخار <span class="font-semibold">${CURRENCY.format(g.savedAmount)}</span> من <span class="font-semibold">${CURRENCY.format(g.targetAmount)}</span></p>
+                        </div>
+                        <div class="flex gap-1">
+                            <button class="add-funds-btn p-2 text-green-500 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-full" data-id="${g.id}" title="إضافة مبلغ"><i data-lucide="plus-circle" class="h-5 w-5 pointer-events-none"></i></button>
+                            <button class="edit-goal-btn p-2 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full" data-id="${g.id}" title="تعديل الهدف"><i data-lucide="edit" class="h-5 w-5 pointer-events-none"></i></button>
+                            <button class="delete-goal-btn p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full" data-id="${g.id}" title="حذف الهدف"><i data-lucide="trash-2" class="h-5 w-5 pointer-events-none"></i></button>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <div class="w-full bg-gray-200 rounded-full h-4 dark:bg-slate-600">
+                            <div class="bg-gradient-to-r from-primary to-indigo-400 h-4 rounded-full text-center text-white text-xs" style="width: ${p}%">${Math.round(p)}%</div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+        return `
+            <div class="glass-card p-6 rounded-2xl shadow-md">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-primary dark:text-indigo-300">أهداف الادخار</h3>
+                    <button id="add-goal-btn" class="p-2 px-4 bg-gradient-to-r from-primary to-indigo-500 hover:shadow-lg text-white rounded-lg flex items-center"><i data-lucide="plus" class="h-5 w-5 ml-2"></i> إضافة هدف جديد</button>
+                </div>
+                <div id="goals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${goalsHTML}</div>
+            </div>`;
+    }
+    
+    function renderReportsPage() {
+        const years = [...new Set(state.transactions.map(t=>new Date(t.date).getFullYear()))].sort((a,b) => b-a);
+        return `
+            <div class="glass-card p-6 rounded-2xl shadow-md">
+                <h3 class="text-xl font-bold text-primary dark:text-indigo-300 mb-4">إنشاء تقرير مالي</h3>
+                <div class="flex flex-wrap gap-4 mb-4">
+                    <select id="report-month" class="p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600"><option value="-1">كل الشهور</option>${[...Array(12).keys()].map(i => <option value="${i}">${new Date(0,i).toLocaleString('ar',{month:'long'})}</option>).join('')}</select>
+                    <select id="report-year" class="p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600">${years.length > 0 ? years.map(y=><option value="${y}">${y}</option>).join('') : <option value="${new Date().getFullYear()}">${new Date().getFullYear()}</option>}</select>
+                    <button id="generate-report-btn" class="p-2 px-4 bg-primary text-white rounded-lg hover:bg-primary-hover">إنشاء</button>
+                </div>
+                <div id="report-output">
+                    <p class="text-gray-500 text-center p-8">اختر الفترة الزمنية لعرض التقرير.</p>
+                </div>
+            </div>`;
+    }
+
+    function renderTrashPage() {
+        const CURRENCY = getCurrencyFormatter();
+        const trashHTML = state.trash.length === 0
+            ? <tr><td colspan="5" class="text-center p-8 text-gray-500">سلة المهملات فارغة.</td></tr>
+            : state.trash.sort((a,b) => new Date(b.deletedAt) - new Date(a.deletedAt)).map(t => `
+                <tr class="border-b dark:border-slate-700">
+                    <td class="px-6 py-4">${t.description}</td>
+                    <td class="px-6 py-4 ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}">${CURRENCY.format(t.amount)}</td>
+                    <td class="px-6 py-4">${t.type === 'income' ? 'دخل' : 'مصروف'}</td>
+                    <td class="px-6 py-4">${new Date(t.deletedAt).toLocaleString('ar-SA')}</td>
+                    <td class="px-6 py-4 flex items-center gap-2">
+                        <button class="restore-transaction-btn p-2 text-green-500 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-full" data-id="${t.id}" title="استعادة"><i data-lucide="rotate-cw" class="h-4 w-4 pointer-events-none"></i></button>
+                        <button class="perm-delete-btn p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full" data-id="${t.id}" title="حذف نهائي"><i data-lucide="x-circle" class="h-4 w-4 pointer-events-none"></i></button>
+                    </td>
+                </tr>`).join('');
+        
+        return `
+            <div class="glass-card p-6 rounded-2xl shadow-md">
+                <h3 class="text-xl font-bold text-primary dark:text-indigo-300 mb-4">سلة المهملات</h3>
+                <p class="text-gray-500 dark:text-gray-400 mb-4">العمليات المحذوفة. يمكنك استعادتها أو حذفها نهائياً.</p>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-right">
+                        <thead class="text-xs uppercase bg-gray-50 dark:bg-slate-700/50"><tr><th class="px-6 py-3">الوصف</th><th class="px-6 py-3">المبلغ</th><th class="px-6 py-3">النوع</th><th class="px-6 py-3">تاريخ الحذف</th><th class="px-6 py-3">إجراءات</th></tr></thead>
+                        <tbody id="trash-table-body">${trashHTML}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+    
+    function renderSettingsPage() {
+        const incomeCategoriesHTML = state.settings.categories.income.map(c => <li class="flex justify-between items-center bg-gray-100 dark:bg-slate-700 p-2 rounded-lg"><span>${c}</span><button class="delete-category-btn text-red-500" data-type="income" data-category="${c}"><i data-lucide="trash-2" class="h-4 w-4 pointer-events-none"></i></button></li>).join('');
+        const expenseCategoriesHTML = state.settings.categories.expense.map(c => <li class="flex justify-between items-center bg-gray-100 dark:bg-slate-700 p-2 rounded-lg"><span>${c}</span><button class="delete-category-btn text-red-500" data-type="expense" data-category="${c}"><i data-lucide="trash-2" class="h-4 w-4 pointer-events-none"></i></button></li>).join('');
+
+        return `
+            <div class="space-y-8">
+                <div class="glass-card p-6 rounded-2xl shadow-md">
+                    <h3 class="text-xl font-bold text-primary dark:text-indigo-300 mb-4">الإعدادات العامة</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div><label class="block mb-1 font-medium">العملة</label><select id="currency-select" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600">${['ILS', 'SAR','USD','EUR','GBP'].map(c=><option value="${c}" ${state.settings.currency===c ? 'selected':''}>${c}</option>).join('')}</select></div>
+                        <div><label class="block mb-1 font-medium">اسم المستخدم</label><div class="flex gap-2"><input type="text" id="new-username-input" value="${state.user}" class="flex-grow p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600"><button id="save-username-btn" class="p-2 px-4 bg-primary text-white rounded-lg">حفظ</button></div></div>
+                    </div>
+                </div>
+                <div class="glass-card p-6 rounded-2xl shadow-md">
+                    <h3 class="text-xl font-bold text-primary dark:text-indigo-300 mb-4">إدارة الفئات</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div><h4 class="font-semibold mb-2">فئات الدخل</h4><ul id="income-categories-list" class="space-y-2">${incomeCategoriesHTML}</ul><div class="flex gap-2 mt-2"><input id="new-income-category" class="flex-grow p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" placeholder="إضافة فئة..."><button data-type="income" class="add-category-btn p-2 bg-primary text-white rounded-lg"><i data-lucide="plus"></i></button></div></div>
+                        <div><h4 class="font-semibold mb-2">فئات المصروف</h4><ul id="expense-categories-list" class="space-y-2">${expenseCategoriesHTML}</ul><div class="flex gap-2 mt-2"><input id="new-expense-category" class="flex-grow p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" placeholder="إضافة فئة..."><button data-type="expense" class="add-category-btn p-2 bg-primary text-white rounded-lg"><i data-lucide="plus"></i></button></div></div>
+                    </div>
+                </div>
+                <div class="glass-card p-6 rounded-2xl shadow-md"><h3 class="text-xl font-bold text-primary dark:text-indigo-300 mb-4">إدارة البيانات</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><button id="backup-data-btn" class="p-3 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center justify-center"><i data-lucide="download" class="h-5 w-5 ml-2"></i>نسخ احتياطي</button><button onclick="document.getElementById('restore-data-input').click()" class="p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center"><i data-lucide="upload" class="h-5 w-5 ml-2"></i>استعادة نسخة</button><input type="file" id="restore-data-input" class="hidden" accept=".json"></div></div>
+                <div class="bg-red-50 dark:bg-red-900/20 p-6 rounded-2xl border border-red-500"><h3 class="text-xl font-bold text-red-600 dark:text-red-400 mb-4">منطقة الخطر</h3><button id="clear-all-data-btn" class="p-3 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center"><i data-lucide="trash-2" class="h-5 w-5 ml-2"></i> مسح جميع البيانات</button></div>
+            </div>`;
+    }
+    
+    // --- CHART LOGIC ---
+    function renderMonthlyChart() {
+        const months = [], incomeData = [], expenseData = [];
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(); d.setMonth(d.getMonth() - i);
+            months.push(d.toLocaleString('ar-SA', { month: 'short' }));
+            const monthTx = state.transactions.filter(t => new Date(t.date).getMonth() === d.getMonth() && new Date(t.date).getFullYear() === d.getFullYear());
+            incomeData.push(monthTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0));
+            expenseData.push(monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0));
+        }
+        const ctx = document.getElementById('monthly-chart')?.getContext('2d');
+        if (!ctx) return;
+        if (monthlyChart) monthlyChart.destroy();
+        monthlyChart = new Chart(ctx, { type: 'bar', data: { labels: months, datasets: [{ label: 'الدخل', data: incomeData, backgroundColor: 'rgba(34, 197, 94, 0.6)' }, { label: 'المصاريف', data: expenseData, backgroundColor: 'rgba(239, 68, 68, 0.6)' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: (v) => v.toLocaleString() } } } } });
+    }
+
+    // --- CORE LOGIC ---
+    const addTransaction = (data) => { state.transactions.push({ id: Date.now().toString(), ...data, amount: parseFloat(data.amount) }); saveData(); showPage('transactions'); };
+    const updateTransaction = (id, data) => { const i = state.transactions.findIndex(t => t.id === id); if(i !== -1) { state.transactions[i] = { ...state.transactions[i], ...data, amount: parseFloat(data.amount) }; saveData(); showPage('transactions'); } };
+    const deleteTransaction = (id) => { const i = state.transactions.findIndex(t => t.id === id); if (i !== -1) { const [delTx] = state.transactions.splice(i, 1); delTx.deletedAt = new Date().toISOString(); state.trash.push(delTx); saveData(); showPage(document.querySelector('.page-content:not(.hidden)').id); } };
+    const restoreTransaction = (id) => { const i = state.trash.findIndex(t => t.id === id); if(i !== -1) { const [resTx] = state.trash.splice(i, 1); delete resTx.deletedAt; state.transactions.push(resTx); saveData(); showPage('trash'); } };
+    const permDeleteTransaction = (id) => { state.trash = state.trash.filter(t => t.id !== id); saveData(); showPage('trash'); };
+    const addGoal = (data) => { state.goals.push({ id: Date.now().toString(), ...data, targetAmount: parseFloat(data.targetAmount), savedAmount: parseFloat(data.savedAmount || 0) }); saveData(); showPage('goals'); };
+    const updateGoal = (id, data) => { const i = state.goals.findIndex(g => g.id === id); if(i !== -1) { state.goals[i] = { ...state.goals[i], ...data, targetAmount: parseFloat(data.targetAmount) }; saveData(); showPage('goals'); } };
+    const deleteGoal = (id) => { state.goals = state.goals.filter(g => g.id !== id); saveData(); showPage('goals'); };
+    const addFundsToGoal = (id, amount) => { const i = state.goals.findIndex(g => g.id === id); if (i !== -1) { state.goals[i].savedAmount = Math.min(state.goals[i].targetAmount, state.goals[i].savedAmount + parseFloat(amount)); saveData(); showPage('goals'); } };
+
+    // --- MODAL FORMS ---
+    function showTransactionForm(tx) {
+        const isEditing = !!tx;
+        const formId = isEditing ? 'edit-tx-form' : 'add-tx-form';
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        const dateValue = tx ? new Date(tx.date).toISOString().slice(0, 16) : now.toISOString().slice(0, 16);
+        
+        const getCategoriesOptions = (type, currentTx) => {
+            const categories = state.settings.categories[type] || [];
+            return categories.map(c => {
+                const isSelected = currentTx && currentTx.type === type && currentTx.category === c;
+                return <option value="${c}" ${isSelected ? 'selected' : ''}>${c}</option>;
+            }).join('');
+        };
+
+        const modalHTML = `
+            <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold text-primary dark:text-indigo-300">${isEditing ? 'تعديل العملية' : 'إضافة عملية جديدة'}</h2><button class="close-modal-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700"><i data-lucide="x" class="h-6 w-6"></i></button></div>
+            <form id="${formId}">
+                <div class="space-y-4">
+                    <div><label class="block mb-1 font-medium">الوصف</label><input type="text" name="description" value="${tx?.description || ''}" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" required></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="block mb-1 font-medium">المبلغ</label><input type="number" name="amount" step="0.01" value="${tx?.amount || ''}" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" required></div>
+                        <div><label class="block mb-1 font-medium">النوع</label><select name="type" id="tx-type-select" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600"><option value="expense" ${tx?.type === 'expense' ? 'selected' : ''}>مصروف</option><option value="income" ${tx?.type === 'income' ? 'selected' : ''}>دخل</option></select></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="block mb-1 font-medium">الفئة</label><select name="category" id="tx-category-select" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600"></select></div>
+                        <div><label class="block mb-1 font-medium">الأهمية</label><select name="importance" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600"><option value="low" ${tx?.importance === 'low' ? 'selected' : ''}>منخفض</option><option value="medium" ${tx?.importance === 'medium' ? 'selected' : ''}>متوسط</option><option value="high" ${tx?.importance === 'high' ? 'selected' : ''}>عالي</option></select></div>
+                    </div>
+                    <div><label class="block mb-1 font-medium">التاريخ والوقت</label><input type="datetime-local" name="date" value="${dateValue}" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" required></div>
+                </div>
+                <div class="mt-8 flex justify-end"><button type="submit" class="p-3 px-6 bg-primary text-white rounded-lg hover:bg-primary-hover">${isEditing ? 'حفظ التعديلات' : 'إضافة العملية'}</button></div>
+            </form>`;
+        openModal(modalHTML);
+        
+        const typeSelect = document.getElementById('tx-type-select');
+        const categorySelect = document.getElementById('tx-category-select');
+        const updateCategories = () => {
+            categorySelect.innerHTML = getCategoriesOptions(typeSelect.value, tx);
+        };
+        updateCategories();
+        typeSelect.addEventListener('change', updateCategories);
+        
+        document.getElementById(formId).addEventListener('submit', (e) => { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target).entries()); if (isEditing) updateTransaction(tx.id, data); else addTransaction(data); closeModal(); });
+    }
+
+    function showGoalForm(goal) {
+        const isEditing = !!goal, formId = isEditing ? 'edit-goal-form' : 'add-goal-form';
+        const modalHTML = `<div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold text-primary dark:text-indigo-300">${isEditing ? 'تعديل الهدف' : 'إضافة هدف جديد'}</h2><button class="close-modal-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700"><i data-lucide="x" class="h-6 w-6"></i></button></div><form id="${formId}"><div class="space-y-4"><div><label class="block mb-1 font-medium">اسم الهدف</label><input type="text" name="name" value="${goal?.name || ''}" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" required></div><div><label class="block mb-1 font-medium">المبلغ المستهدف</label><input type="number" name="targetAmount" step="0.01" value="${goal?.targetAmount || ''}" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" required></div> ${isEditing ? <div><label class="block mb-1 font-medium">المبلغ المدخر حالياً</label><input type="number" name="savedAmount" step="0.01" value="${goal?.savedAmount || 0}" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" required></div> : ''}</div><div class="mt-8 flex justify-end"><button type="submit" class="p-3 px-6 bg-primary text-white rounded-lg hover:bg-primary-hover">${isEditing ? 'حفظ التعديلات' : 'إضافة الهدف'}</button></div></form>`;
+        openModal(modalHTML);
+        document.getElementById(formId).addEventListener('submit', (e) => { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target).entries()); if(isEditing) updateGoal(goal.id, data); else addGoal(data); closeModal(); });
+    }
+
+    function showAddFundsForm(goal) {
+        const modalHTML = <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold text-primary dark:text-indigo-300">إضافة مبلغ لهدف: ${goal.name}</h2><button class="close-modal-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700"><i data-lucide="x" class="h-6 w-6"></i></button></div><form id="add-funds-form"><div><label class="block mb-1 font-medium">المبلغ</label><input type="number" name="amount" step="0.01" class="w-full p-2 border rounded-lg bg-gray-200/50 dark:bg-slate-700 dark:border-slate-600" required></div><div class="mt-8 flex justify-end"><button type="submit" class="p-3 px-6 bg-primary text-white rounded-lg hover:bg-primary-hover">إضافة</button></div></form>;
+        openModal(modalHTML);
+        document.getElementById('add-funds-form').addEventListener('submit', (e) => { e.preventDefault(); addFundsToGoal(goal.id, e.target.elements.amount.value); closeModal(); });
+    }
+
+    function showConfirmationModal(title, message, onConfirm) {
+        const modalHTML = <h2 class="text-2xl font-bold text-red-600 dark:text-red-400 mb-4">${title}</h2><p class="mb-6">${message}</p><div class="flex justify-end gap-4"><button class="close-modal-btn p-3 px-6 bg-gray-200 dark:bg-slate-600 rounded-lg">إلغاء</button><button id="confirm-action" class="p-3 px-6 bg-red-600 text-white rounded-lg hover:bg-red-700">تأكيد</button></div>;
+        openModal(modalHTML);
+        document.getElementById('confirm-action').addEventListener('click', () => { onConfirm(); closeModal(); });
+    }
+
+    // --- EXPORT & PRINT LOGIC ---
+    const getFilteredTransactions = () => {
+        const search = document.getElementById('transactions-search')?.value.toLowerCase() || '';
+        const type = document.getElementById('transactions-type-filter')?.value || 'all';
+        const importance = document.getElementById('transactions-importance-filter')?.value || 'all';
+        return state.transactions.filter(t => (t.description.toLowerCase().includes(search) || t.category.toLowerCase().includes(search)) && (type === 'all' || t.type === type) && (importance === 'all' || t.importance === importance));
+    };
+
+    const exportToExcel = () => {
+        const transactions = getFilteredTransactions();
+        const data = transactions.map(t => ({
+            'الوصف': t.description,
+            'المبلغ': t.amount,
+            'الفئة': t.category,
+            'النوع': t.type === 'income' ? 'دخل' : 'مصروف',
+            'الأهمية': {high: 'عالي', medium: 'متوسط', low: 'منخفض'}[t.importance],
+            'التاريخ': new Date(t.date).toLocaleDateString('ar-SA')
+        }));
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "العمليات");
+        XLSX.writeFile(workbook, "transactions.xlsx");
+    };
+
+    const exportToPdf = () => {
+        const transactions = getFilteredTransactions();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // This is a placeholder for a real Arabic font file.
+        // For production, you would host a .ttf file and load it.
+        // As a fallback, we'll rely on system fonts which may not work everywhere.
+        doc.addFont('https://fonts.gstatic.com/s/cairo/v14/SLXLc1svqfD-d2I7-4Be.ttf', 'Cairo', 'normal');
+        doc.setFont('Cairo'); 
+        
+        const head = [['التاريخ', 'الأهمية', 'النوع', 'الفئة', 'المبلغ', 'الوصف']];
+        const body = transactions.map(t => [
+            new Date(t.date).toLocaleDateString('ar-SA'),
+            {high: 'عالي', medium: 'متوسط', low: 'منخفض'}[t.importance],
+            t.type === 'income' ? 'دخل' : 'مصروف',
+            t.category,
+            t.amount,
+            t.description
+        ].reverse()); // Reverse for RTL display in AutoTable
+
+        doc.autoTable({
+            head: head,
+            body: body,
+            styles: { font: "Cairo", halign: 'right' },
+             headStyles: { halign: 'center', fillColor: [79, 70, 229] },
+             alternateRowStyles: { fillColor: [240, 242, 245] },
+             didDrawPage: function (data) {
+                doc.text('تقرير العمليات', data.settings.margin.left, 15);
+             }
+        });
+        
+        doc.save("transactions.pdf");
+    };
+    
+    const printReport = () => {
+        const reportContent = document.getElementById('report-output')?.innerHTML;
+        if (reportContent) {
+            printArea.innerHTML = reportContent;
+            window.print();
+            printArea.innerHTML = '';
+        }
+    };
+
+
+    // --- INITIALIZATION ---
+    const initApp = () => {
+        loginPage.classList.add('hidden');
+        appPage.classList.remove('hidden');
+        appUsername.textContent = state.user;
+        showPage('dashboard');
+    };
+    const initialize = () => {
+        loadData();
+        applyTheme();
+        renderLogin();
+    };
+    
+    // --- EVENT LISTENERS (DELEGATION) ---
+    document.body.addEventListener('submit', (e) => {
+        if (e.target.id === 'login-form') { e.preventDefault(); state.user = document.getElementById('username-input').value.trim(); saveData(); renderLogin(); }
+        if (e.target.id === 'pin-set-form') { e.preventDefault(); state.pin = document.getElementById('pin-set-input').value; saveData(); initApp(); }
+        if (e.target.id === 'pin-enter-form') {
+            e.preventDefault();
+            const pinInput = document.getElementById('pin-enter-input');
+            const pinError = document.getElementById('pin-error');
+            if (pinInput.value === state.pin) { initApp(); } 
+            else { pinError.textContent = 'رمز PIN غير صحيح.'; pinInput.value = ''; pinInput.focus(); }
+        }
+    });
+
+    document.body.addEventListener('click', (e) => {
+        const target = e.target.closest('button, a');
+        if (!target) return;
+
+        // Handle sidebar <a> links first
+        if (target.matches('.nav-link')) {
+            e.preventDefault();
+            showPage(target.dataset.page);
+            return;
+        }
+
+        const button = target.closest('button');
+        if (!button) return;
+        
+        const id = button.dataset.id || button.closest('[data-id]')?.dataset.id;
+        
+        if (button.id === 'theme-toggle-btn') { state.settings.theme = state.settings.theme === 'light' ? 'dark' : 'light'; applyTheme(); saveData(); return; }
+        if (button.id === 'logout-btn') { appPage.classList.add('hidden'); loginPage.classList.remove('hidden'); renderLogin(); return; }
+
+        // Transactions
+        if (button.id === 'add-transaction-btn') { showTransactionForm(null); return; }
+        if (button.classList.contains('edit-transaction-btn')) { showTransactionForm(state.transactions.find(t => t.id === id)); return; }
+        if (button.classList.contains('delete-transaction-btn')) { showConfirmationModal('تأكيد الحذف', 'سيتم نقل العملية لسلة المهملات.', () => deleteTransaction(id)); return; }
+        
+        // Goals
+        if (button.id === 'add-goal-btn') { showGoalForm(null); return; }
+        if (button.classList.contains('edit-goal-btn')) { showGoalForm(state.goals.find(g => g.id === id)); return; }
+        if (button.classList.contains('delete-goal-btn')) { showConfirmationModal('تأكيد الحذف', 'هل أنت متأكد من حذف الهدف؟', () => deleteGoal(id)); return; }
+        if (button.classList.contains('add-funds-btn')) { showAddFundsForm(state.goals.find(g => g.id === id)); return; }
+        
+        // Trash
+        if (button.classList.contains('restore-transaction-btn')) { restoreTransaction(id); return; }
+        if (button.classList.contains('perm-delete-btn')) { showConfirmationModal('حذف نهائي', 'لا يمكن التراجع عن هذا الإجراء.', () => permDeleteTransaction(id)); return; }
+
+        // Settings
+        if (button.id === 'save-username-btn') { const u = document.getElementById('new-username-input').value.trim(); if(u) { state.user = u; saveData(); appUsername.textContent = u; alert('تم تغيير الاسم بنجاح!'); } return; }
+        if (button.classList.contains('add-category-btn')) {
+            const type = button.dataset.type;
+            const input = document.getElementById(new-${type}-category);
+            const category = input.value.trim();
+            if (category && !state.settings.categories[type].includes(category)) { state.settings.categories[type].push(category); saveData(); showPage('settings'); }
+            input.value = '';
+            return;
+        }
+        if (button.classList.contains('delete-category-btn')) {
+            const { type, category } = button.dataset;
+            state.settings.categories[type] = state.settings.categories[type].filter(c => c !== category);
+            saveData();
+            showPage('settings');
+            return;
+        }
+        if (button.id === 'clear-all-data-btn') { showConfirmationModal('مسح جميع البيانات', 'سيتم حذف كل البيانات بشكل نهائي.', () => { state = JSON.parse(JSON.stringify(defaultState)); saveData(); window.location.reload(); }); return; }
+        if (button.id === 'backup-data-btn') { const a = document.createElement('a'); a.href = 'data:application/json;charset=utf-8,'+ encodeURIComponent(JSON.stringify(state)); a.download = masroofi_backup_${new Date().toISOString().split('T')[0]}.json; a.click(); return; }
+
+        // Export and Print
+        if (button.id === 'export-excel-btn') { exportToExcel(); return; }
+        if (button.id === 'export-pdf-btn') { exportToPdf(); return; }
+        if (button.id === 'print-report-btn') { printReport(); return; }
+        
+        // Reports
+        if (button.id === 'generate-report-btn') {
+            const month = parseInt(document.getElementById('report-month').value);
+            const year = parseInt(document.getElementById('report-year').value);
+            const filtered = state.transactions.filter(t => (new Date(t.date).getFullYear() === year) && (month === -1 || new Date(t.date).getMonth() === month));
+            
+            const income = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+            const expense = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+            const expenseByCategory = filtered.filter(t => t.type === 'expense').reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + t.amount; return acc; }, {});
+            
+            const CURRENCY = getCurrencyFormatter();
+            document.getElementById('report-output').innerHTML = `
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">تقرير ${month === -1 ? سنة ${year} : ${new Date(year, month).toLocaleString('ar', {month: 'long'})} ${year}}</h3>
+                    <button id="print-report-btn" class="p-2 px-4 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center no-print"><i data-lucide="printer" class="h-5 w-5 ml-2"></i> طباعة</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
+                    <div class="p-4 bg-green-100 dark:bg-green-900/50 rounded-lg"><p>إجمالي الدخل</p><p class="text-xl font-bold text-green-600">${CURRENCY.format(income)}</p></div>
+                    <div class="p-4 bg-red-100 dark:bg-red-900/50 rounded-lg"><p>إجمالي المصاريف</p><p class="text-xl font-bold text-red-600">${CURRENCY.format(expense)}</p></div>
+                    <div class="p-4 bg-blue-100 dark:bg-blue-900/50 rounded-lg"><p>صافي التوفير</p><p class="text-xl font-bold text-blue-600">${CURRENCY.format(income - expense)}</p></div>
+                </div>
+                <div><h4 class="text-lg font-bold mb-4">تفصيل المصاريف حسب الفئة</h4><div class="chart-container h-64"><canvas id="report-chart"></canvas></div></div>
+            `;
+            lucide.createIcons(); // Re-render the print icon
+            if (reportChart) reportChart.destroy();
+            const ctx = document.getElementById('report-chart')?.getContext('2d');
+            if (ctx && Object.keys(expenseByCategory).length > 0) {
+                reportChart = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(expenseByCategory), datasets: [{ data: Object.values(expenseByCategory) }] }, options: { responsive: true, maintainAspectRatio: false } });
+            }
+        }
+    });
+
+    document.body.addEventListener('input', (e) => {
+         if (['transactions-search', 'transactions-type-filter', 'transactions-importance-filter'].includes(e.target.id)) {
+            const filtered = getFilteredTransactions();
+            document.getElementById('transactions').innerHTML = renderTransactionsPage(filtered);
+            lucide.createIcons();
+        }
+    });
+    
+    document.body.addEventListener('change', (e) => {
+        if (e.target.id === 'currency-select') { state.settings.currency = e.target.value; saveData(); showPage('dashboard'); }
+        if (e.target.id === 'restore-data-input') {
+            const file = e.target.files[0]; if (!file) return; const reader = new FileReader();
+            reader.onload = (event) => { try { const restored = JSON.parse(event.target.result); if (restored.user) { state = restored; saveData(); alert('تم استعادة البيانات بنجاح!'); window.location.reload(); } else throw new Error(); } catch (err) { alert('خطأ في استعادة الملف.'); } };
+            reader.readAsText(file);
+        }
+    });
+
+    initialize();
+});
+</script>
+</body>
+</html>
